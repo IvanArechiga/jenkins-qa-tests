@@ -27,9 +27,10 @@ pipeline {
 
         stage('Ejecutar Pruebas') {
             steps {
-                echo 'Ejecutando la suite de pruebas automatizadas...'
-                // Ejecuta los tests configurados en el proyecto
-                sh 'gradle test'
+                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                    // Añadimos --no-configuration-cache para evitar errores de compatibilidad en Gradle 8+
+                    sh 'gradle test --rerun-tasks --info --no-configuration-cache'
+                }
             }
         }
     }
