@@ -1,42 +1,42 @@
 pipeline {
-    agent any // Se ejecuta en el contenedor de Jenkins
-
-    // Herramientas necesarias (ej. si usas NodeJS para Cypress o Playwright)
-    // tools { nodejs 'NodeJS' }
+    agent any // Se ejecuta en el contenedor principal de Jenkins
 
     stages {
         stage('Descargar Código') {
             steps {
+                // Descarga el código de la rama actual de GitHub
                 checkout scm
                 echo 'Código descargado de GitHub correctamente.'
             }
         }
 
-        stage('Instalar Dependencias de Pruebas') {
+        stage('Instalar Dependencias') {
             steps {
-                echo 'Instalando librerías (ej. npm install o pip install)...'
-                // sh 'npm install'  <-- Descomenta esto en la vida real
+                echo 'Instalando dependencias del proyecto...'
+
+                // Comando por defecto para proyectos Node.js (Cypress, Playwright, WebDriverIO)
+                sh 'npm install'
+
+                // Si usas Python, comenta la línea de arriba y usa esta:
+                // sh 'pip install -r requirements.txt'
+
+                // Si usas Java/Maven, usa esta:
+                // sh 'mvn clean install -DskipTests'
             }
         }
 
-        // AQUÍ ESTÁ LA MAGIA QUE PEDISTE: EJECUCIÓN SIMULTÁNEA (PARALELA)
-        stage('Ejecución de Pruebas Core') {
-            parallel {
-                stage('Módulo: Cajas') {
-                    steps {
-                        echo 'Iniciando pruebas automatizadas de CAJAS...'
-                        // sh 'npm run test:cajas' <-- Tu comando real de test
-                        // Simulamos que toma tiempo
-                        sleep 5
-                    }
-                }
-                stage('Módulo: Ventas') {
-                    steps {
-                        echo 'Iniciando pruebas automatizadas de VENTAS...'
-                        // sh 'npm run test:ventas' <-- Tu comando real de test
-                        sleep 5
-                    }
-                }
+        stage('Ejecutar Pruebas') {
+            steps {
+                echo 'Ejecutando la suite de pruebas automatizadas...'
+
+                // Comando por defecto para correr tests en Node.js
+                sh 'npm test'
+
+                // Si usas Python:
+                // sh 'pytest'
+
+                // Si usas Java/Maven:
+                // sh 'mvn test'
             }
         }
     }
@@ -44,19 +44,18 @@ pipeline {
     // Esta sección siempre se ejecuta al final, fallen o pasen las pruebas
     post {
         always {
-            echo 'Generando Reporte de Resultados...'
-            // Suponiendo que tus pruebas generan resultados en la carpeta allure-results
+            echo 'Finalizó la ejecución.'
+            // Cuando configures Allure, descomentarás la siguiente línea:
             // allure includeProperties: false, jdk: '', results: [[path: 'allure-results']]
 
-            echo 'Limpiando espacio de trabajo...'
+            echo 'Limpiando espacio de trabajo para no saturar el disco...'
             cleanWs()
         }
         success {
-            echo '✅ Todas las pruebas pasaron exitosamente. El sistema es estable.'
-            // Aquí podrías poner un código para mandar mensaje a Slack o Teams
+            echo '✅ Todas las pruebas pasaron exitosamente. El código es estable.'
         }
         failure {
-            echo '❌ Algunas pruebas fallaron. Revisar el reporte Allure de inmediato.'
+            echo '❌ Algunas pruebas fallaron o hubo un error de compilación. Revisa los logs.'
         }
     }
 }
