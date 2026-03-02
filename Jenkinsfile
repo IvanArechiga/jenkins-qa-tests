@@ -11,12 +11,14 @@ properties([
                     try {
                         def jenkinsInstance = jenkins.model.Jenkins.get()
 
-                        // Obtenemos el nombre completo del trabajo actual (incluyendo carpetas)
-                        def currentJobName = binding.variables['JOB_NAME'] ?: ""
+                        // Obtenemos el nombre del trabajo actual y lo convertimos a String limpio
+                        def currentJobName = (binding.hasVariable('JOB_NAME') ? binding.getVariable('JOB_NAME').toString().trim() : "")
 
-                        // Filtramos comparando contra el fullName para una exclusión exacta
+                        // Filtramos comparando contra el fullName forzado a String para exclusión exacta
                         return jenkinsInstance.getAllItems(hudson.model.Job.class).findAll { job ->
-                            job.fullName != currentJobName
+                            def jobFullName = job.fullName.toString().trim()
+                            // Excluimos si el nombre es igual al actual
+                            jobFullName != currentJobName
                         }.collect { it.fullName }.sort()
                     } catch (Exception e) {
                         return ["Error: " + e.getMessage()]
