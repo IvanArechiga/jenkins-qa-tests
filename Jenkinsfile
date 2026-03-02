@@ -6,21 +6,18 @@ properties([
             name: 'MODULOS_ADICIONALES',
             script: [
                 $class: 'GroovyScript',
-                fallbackScript: [sandbox: false, script: 'return ["Esperando aprobación de script en Jenkins..."]'],
+                fallbackScript: [sandbox: false, script: 'return ["Esperando aprobación de seguridad..."]'],
                 script: [sandbox: false, script: '''
                     try {
-                        // Acceso al motor de Jenkins
                         def jenkinsInstance = jenkins.model.Jenkins.get()
+                        // Filtramos para que el proyecto actual NO aparezca en su propia lista
+                        def currentJobName = (binding.hasVariable('JOB_NAME')) ? binding.getVariable('JOB_NAME') : ""
 
-                        // FIX: Obtenemos el JOB_NAME desde el binding del script, no desde env
-                        def currentJobName = binding.variables.get('JOB_NAME') ?: ""
-
-                        // Obtenemos todos los Jobs excluyendo el actual para evitar recursividad
                         return jenkinsInstance.getAllItems(hudson.model.Job.class).findAll { job ->
                             job.fullName != currentJobName
                         }.collect { it.fullName }.sort()
                     } catch (Exception e) {
-                        return ["Error de permisos: " + e.getMessage()]
+                        return ["Error: " + e.getMessage()]
                     }
                 ''']
             ]
@@ -43,28 +40,28 @@ pipeline {
             }
         }
 
-        stage('Ejecución de Pruebas en Paralelo') {
+        stage('Ejecución Paralela') {
             steps {
                 script {
                     def tareasParalelas = [:]
 
-                    // 1. PROYECTO ACTUAL (Core/Principal)
+                    // 1. TAREA LOCAL (El proyecto donde estamos)
                     tareasParalelas["Pruebas Locales"] = {
-                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                            sh "gradle test --no-daemon --rerun-tasks --info --no-configuration-cache"
+                        stage("Ejecución Core") {
+                            catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                                sh "gradle test --no-daemon --rerun-tasks --info --no-configuration-cache"
+                            }
                         }
                     }
 
-                    // 2. PROYECTOS ADICIONALES (Orquestación Downstream)
+                    // 2. TAREAS EXTERNAS (Si se seleccionaron checkboxes)
                     if (params.MODULOS_ADICIONALES) {
                         def seleccionados = params.MODULOS_ADICIONALES.split(',')
                         seleccionados.each { nombre ->
                             def jobName = nombre.trim()
                             if (jobName && !jobName.contains("Esperando") && !jobName.contains("Error")) {
                                 tareasParalelas["Job: ${jobName}"] = {
-                                    stage("Disparando: ${jobName}") {
-                                        build job: jobName, wait: true
-                                    }
+                                    build job: jobName, wait: true
                                 }
                             }
                         }
@@ -78,7 +75,6 @@ pipeline {
 
     post {
         always {
-            echo 'Consolidando resultados Allure...'
             allure includeProperties: false, jdk: '', results: [[path: 'build/allure-results']]
             cleanWs()
         }
