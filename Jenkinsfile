@@ -1,6 +1,13 @@
 pipeline {
     agent any // Se ejecuta en el contenedor principal de Jenkins
 
+    // INYECCIÓN DE HERRAMIENTAS: Aquí Jenkins carga Java y Maven
+    // Los nombres deben coincidir EXACTAMENTE con los que pusiste en el Paso 2.1
+    tools {
+        jdk 'JDK17'
+        maven 'Maven3'
+    }
+
     stages {
         stage('Descargar Código') {
             steps {
@@ -10,33 +17,19 @@ pipeline {
             }
         }
 
-        stage('Instalar Dependencias') {
+        stage('Compilar Proyecto') {
             steps {
-                echo 'Instalando dependencias del proyecto...'
-
-                // Comando por defecto para proyectos Node.js (Cypress, Playwright, WebDriverIO)
-                sh 'npm install'
-
-                // Si usas Python, comenta la línea de arriba y usa esta:
-                // sh 'pip install -r requirements.txt'
-
-                // Si usas Java/Maven, usa esta:
-                // sh 'mvn clean install -DskipTests'
+                echo 'Descargando dependencias del pom.xml y compilando el código...'
+                // Descarga dependencias de Maven y compila sin correr las pruebas aún
+                sh 'mvn clean compile'
             }
         }
 
         stage('Ejecutar Pruebas') {
             steps {
-                echo 'Ejecutando la suite de pruebas automatizadas...'
-
-                // Comando por defecto para correr tests en Node.js
-                sh 'npm test'
-
-                // Si usas Python:
-                // sh 'pytest'
-
-                // Si usas Java/Maven:
-                // sh 'mvn test'
+                echo 'Ejecutando la suite de pruebas automatizadas (TestNG/JUnit)...'
+                // Ejecuta los tests configurados en el proyecto Java
+                sh 'mvn test'
             }
         }
     }
@@ -45,10 +38,12 @@ pipeline {
     post {
         always {
             echo 'Finalizó la ejecución.'
-            // Cuando configures Allure, descomentarás la siguiente línea:
-            // allure includeProperties: false, jdk: '', results: [[path: 'allure-results']]
 
-            echo 'Limpiando espacio de trabajo para no saturar el disco...'
+            // Más adelante, para generar el reporte de Allure (si lo usas en tu pom.xml),
+            // descomentarás esta línea:
+            // allure includeProperties: false, jdk: '', results: [[path: 'target/allure-results']]
+
+            echo 'Limpiando espacio de trabajo para no saturar el disco del servidor...'
             cleanWs()
         }
         success {
