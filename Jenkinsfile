@@ -10,13 +10,12 @@ properties([
                 script: [sandbox: false, script: '''
                     try {
                         def jenkinsInstance = jenkins.model.Jenkins.get()
+                        // Obtenemos el nombre exacto del JOB_NAME del binding
+                        def currentJobName = binding.variables['JOB_NAME']?.toString() ?: ""
 
-                        // Obtenemos el nombre del trabajo actual de forma limpia
-                        def currentJobName = (binding.hasVariable('JOB_NAME') ? binding.getVariable('JOB_NAME').toString().trim() : "")
-
-                        // Filtramos comparando contra el fullName para exclusión exacta
                         return jenkinsInstance.getAllItems(hudson.model.Job.class).findAll { job ->
-                            job.fullName.toString().trim() != currentJobName
+                            // Filtrado estricto por fullName
+                            job.fullName.toString() != currentJobName
                         }.collect { it.fullName }.sort()
                     } catch (Exception e) {
                         return ["Error: " + e.getMessage()]
@@ -38,9 +37,9 @@ pipeline {
     stages {
         stage('Limpieza Profunda') {
             steps {
-                // Borramos todo rastro físico de la ejecución anterior
+                // Borramos todo rastro físico de la ejecución anterior en el workspace
                 deleteDir()
-                sh "rm -rf build/ .gradle/ allure-results/"
+                sh "rm -rf allure-results build .gradle"
                 checkout scm
             }
         }
@@ -50,15 +49,15 @@ pipeline {
                 script {
                     def tareasParalelas = [:]
 
-                    // 1. EJECUCIÓN LOCAL (Este proyecto)
+                    // 1. EJECUCIÓN LOCAL (Core)
                     tareasParalelas["Pruebas Core"] = {
                         catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                            // Clean forzado para regenerar binarios y reportes
-                            sh "gradle clean test --no-daemon --rerun-tasks --info --no-configuration-cache"
+                            // Importante: forzamos que Gradle use la carpeta allure-results en la raíz
+                            sh "gradle clean test -Dallure.results.directory=allure-results --no-daemon --rerun-tasks --info"
                         }
                     }
 
-                    // 2. EJECUCIÓN EXTERNA (Otros proyectos)
+                    // 2. EJECUCIÓN EXTERNA (Orquestación)
                     if (params.MODULOS_ADICIONALES) {
                         def seleccionados = params.MODULOS_ADICIONALES.split(',')
                         seleccionados.each { nombre ->
@@ -80,11 +79,11 @@ pipeline {
     post {
         always {
             script {
-                echo 'Generando reporte final Allure...'
-                // Buscamos resultados en la carpeta estándar de Gradle
-                allure includeProperties: false, jdk: '', results: [[path: 'build/allure-results']]
+                echo 'Generando reporte consolidado de Core...'
+                // Buscamos resultados en la carpeta que forzamos en el comando sh
+                allure includeProperties: false, jdk: '', results: [[path: 'allure-results']]
             }
-            // Limpiamos para evitar problemas en el siguiente build
+            // Mantenemos el workspace limpio para el siguiente build
             cleanWs()
         }
     }
