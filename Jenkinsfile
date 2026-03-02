@@ -6,15 +6,20 @@ properties([
             name: 'MODULOS_ADICIONALES',
             script: [
                 $class: 'GroovyScript',
-                fallbackScript: [sandbox: false, script: 'return ["Error: Ejecuta el build una vez y aprueba el script"]'],
+                fallbackScript: [sandbox: false, script: 'return ["Esperando aprobación de script en Jenkins..."]'],
                 script: [sandbox: false, script: '''
-                    // Obtenemos el nombre del proyecto actual dinámicamente
-                    def currentJob = jenkins.model.Jenkins.get().getItem(JOB_NAME)?.fullName
+                    try {
+                        // Acceso seguro al motor de Jenkins
+                        def jenkinsInstance = jenkins.model.Jenkins.get()
+                        def currentJobName = env.JOB_NAME ?: ""
 
-                    return jenkins.model.Jenkins.get().getAllItems(hudson.model.Job.class).findAll {
-                        // Filtro dinámico: No mostrar el proyecto donde estamos parados
-                        it.fullName != currentJob
-                    }.collect { it.fullName }
+                        // Obtenemos todos los Jobs excluyendo el actual
+                        return jenkinsInstance.getAllItems(hudson.model.Job.class).findAll { job ->
+                            job.fullName != currentJobName
+                        }.collect { it.fullName }.sort()
+                    } catch (Exception e) {
+                        return ["Error de permisos: " + e.getMessage()]
+                    }
                 ''']
             ]
         ]
@@ -41,19 +46,24 @@ pipeline {
                 script {
                     def tareasParalelas = [:]
 
+                    // 1. PROYECTO ACTUAL (Core/Principal)
                     tareasParalelas["Pruebas Locales"] = {
                         catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
                             sh "gradle test --no-daemon --rerun-tasks --info --no-configuration-cache"
                         }
                     }
 
+                    // 2. PROYECTOS ADICIONALES (Orquestación Downstream)
                     if (params.MODULOS_ADICIONALES) {
                         def seleccionados = params.MODULOS_ADICIONALES.split(',')
                         seleccionados.each { nombre ->
-                            if (nombre && !nombre.contains("Error")) {
-                                tareasParalelas["Job: ${nombre}"] = {
-                                    // 'wait: true' es necesario para consolidar el reporte Allure al final
-                                    build job: "${nombre.trim()}", wait: true
+                            // Limpiamos el nombre y validamos que no sea el mensaje de error
+                            def jobName = nombre.trim()
+                            if (jobName && !jobName.contains("Esperando") && !jobName.contains("Error")) {
+                                tareasParalelas["Job: ${jobName}"] = {
+                                    stage("Disparando: ${jobName}") {
+                                        build job: jobName, wait: true
+                                    }
                                 }
                             }
                         }
