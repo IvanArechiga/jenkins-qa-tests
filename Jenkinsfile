@@ -38,8 +38,10 @@ pipeline {
     }
 
     stages {
-        stage('Descargar Código') {
+        stage('Limpieza y Descarga') {
             steps {
+                // Forzamos limpieza del espacio de trabajo antes de empezar
+                deleteDir()
                 checkout scm
             }
         }
@@ -49,16 +51,17 @@ pipeline {
                 script {
                     def tareasParalelas = [:]
 
-                    // 1. TAREA LOCAL (El proyecto donde estamos)
+                    // 1. TAREA LOCAL (Core) - Ahora con 'clean' para reparar reportes
                     tareasParalelas["Pruebas Locales"] = {
                         stage("Ejecución Core") {
                             catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                                sh "gradle test --no-daemon --rerun-tasks --info --no-configuration-cache"
+                                // Añadimos 'clean' antes de 'test' para borrar resultados viejos
+                                sh "gradle clean test --no-daemon --rerun-tasks --info --no-configuration-cache"
                             }
                         }
                     }
 
-                    // 2. TAREAS EXTERNAS (Si se seleccionaron checkboxes)
+                    // 2. TAREAS EXTERNAS
                     if (params.MODULOS_ADICIONALES) {
                         def seleccionados = params.MODULOS_ADICIONALES.split(',')
                         seleccionados.each { nombre ->
@@ -79,7 +82,9 @@ pipeline {
 
     post {
         always {
+            // Generación de reporte consolidado
             allure includeProperties: false, jdk: '', results: [[path: 'build/allure-results']]
+            // Limpieza final para no dejar basura en el servidor
             cleanWs()
         }
     }
