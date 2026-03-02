@@ -49,13 +49,13 @@ pipeline {
             }
         }
 
-        // Ejecución 100% Dinámica: Fija el proyecto base y añade los extras seleccionados
+        // Ejecución 100% Dinámica: Fija el proyecto base y dispara los Jobs extras en paralelo
         stage('Ejecución de Pruebas en Paralelo') {
             steps {
                 script {
                     def tareasParalelas = [:]
 
-                    // 1. TAREA OBLIGATORIA: El proyecto principal siempre se ejecuta
+                    // 1. TAREA OBLIGATORIA: El proyecto principal siempre se ejecuta localmente
                     tareasParalelas["Proyecto Principal"] = {
                         stage("Proyecto Principal") {
                             catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
@@ -76,17 +76,14 @@ pipeline {
 
                             if (nombreModulo != "") {
                                 tareasParalelas["Módulo Extra: ${nombreModulo}"] = {
-                                    stage("Extra: ${nombreModulo}") {
+                                    stage("Disparando: ${nombreModulo}") {
                                         catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                                            echo "Iniciando pruebas adicionales para el proyecto de Jenkins: ${nombreModulo}..."
+                                            echo "Iniciando orquestación. Disparando el Job de Jenkins: ${nombreModulo}..."
 
-                                            // Aquí usamos el nombre del proyecto detectado en Jenkins para filtrarlo en Gradle
-                                            sh "gradle test --tests '*${nombreModulo}*' --rerun-tasks --info --no-configuration-cache"
-
-                                            /* Nota de Arquitecto: Si los checkboxes detectados son realmente OTROS pipelines de Jenkins,
-                                               en lugar del 'sh' de arriba, deberías usar el disparador de jobs nativo:
-                                               build job: "${nombreModulo}", wait: true
-                                            */
+                                            // Como son Jobs separados de Jenkins (ej. sxt-cashRegister),
+                                            // usamos 'build job' para que Jenkins ejecute ese otro proyecto.
+                                            // 'wait: true' asegura que este pipeline principal espere a que el extra termine.
+                                            build job: "${nombreModulo}", wait: true
                                         }
                                     }
                                 }
@@ -94,7 +91,7 @@ pipeline {
                         }
                     }
 
-                    // 3. Ejecutamos el bloque principal y los extras (si los hay) simultáneamente
+                    // 3. Ejecutamos el bloque principal y los extras simultáneamente
                     echo "Ejecutando en paralelo: Proyecto Principal + Extras Seleccionados"
                     parallel tareasParalelas
                 }
