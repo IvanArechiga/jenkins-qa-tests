@@ -41,7 +41,7 @@ pipeline {
 
             // Más adelante, para generar el reporte de Allure en Gradle,
             // descomentarás esta línea (Nota: en Gradle la carpeta por defecto es build/allure-results):
-            // allure includeProperties: false, jdk: '', results: [[path: 'build/allure-results']]
+            allure includeProperties: false, jdk: '', results: [[path: 'build/allure-results']]
 
             echo 'Limpiando espacio de trabajo para no saturar el disco del servidor...'
             cleanWs()
