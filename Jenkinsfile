@@ -10,11 +10,14 @@ properties([
                 script: [sandbox: false, script: '''
                     try {
                         def jenkinsInstance = jenkins.model.Jenkins.get()
-                        // Filtramos para que el proyecto actual NO aparezca en su propia lista
-                        def currentJobName = (binding.hasVariable('JOB_NAME')) ? binding.getVariable('JOB_NAME') : ""
 
+                        // Obtenemos el nombre del trabajo actual de forma robusta
+                        def currentJobName = binding.variables['JOB_NAME']?.split('/')?.last() ?: ""
+
+                        // Filtramos para excluir el proyecto principal de la lista
                         return jenkinsInstance.getAllItems(hudson.model.Job.class).findAll { job ->
-                            job.fullName != currentJobName
+                            // Comparamos el nombre completo y el nombre simple para evitar que aparezca
+                            job.fullName != currentJobName && job.name != currentJobName
                         }.collect { it.fullName }.sort()
                     } catch (Exception e) {
                         return ["Error: " + e.getMessage()]
