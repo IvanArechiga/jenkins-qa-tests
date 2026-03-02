@@ -5,7 +5,7 @@ pipeline {
     // Los nombres deben coincidir EXACTAMENTE con los que pusiste en el Paso 2.1
     tools {
         jdk 'JDK21'
-        gradle 'Gradle8.11'
+        gradle 'Gradle'
     }
 
     stages {
