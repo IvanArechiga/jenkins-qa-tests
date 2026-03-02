@@ -1,4 +1,4 @@
-// MAGIA AÑADIDA: Interfaz de Checkboxes Segura (Active Choices Plugin)
+// MAGIA AÑADIDA: Lectura dinámica de la API interna de Jenkins (Sin Sandbox)
 properties([
     parameters([
         [$class: 'ChoiceParameter',
@@ -7,9 +7,21 @@ properties([
             name: 'MODULOS_ADICIONALES',
             script: [
                 $class: 'GroovyScript',
-                fallbackScript: [sandbox: true, script: 'return ["Error al cargar módulos"]'],
-                // Esta es la lista de módulos extra. Ninguno está marcado por defecto.
-                script: [sandbox: true, script: 'return ["ventas", "cajas", "inventario", "pagos"]']
+                fallbackScript: [sandbox: false, script: 'return ["Error al cargar módulos"]'],
+                // Al apagar el sandbox (sandbox: false), Jenkins nos permite consultar su núcleo.
+                // Buscamos todos los Jobs y los metemos a la lista dinámicamente.
+                script: [sandbox: false, script: '''
+                    def listaProyectos = []
+
+                    // Consultamos el núcleo de Jenkins por todos los elementos (Jobs/Proyectos)
+                    jenkins.model.Jenkins.instance.getAllItems(hudson.model.Job.class).each { job ->
+                        // Evitamos poner el proyecto actual en la lista de extras para no duplicar
+                        if (!job.fullName.contains("QA-Automatizacion-Core")) {
+                            listaProyectos.add(job.fullName)
+                        }
+                    }
+                    return listaProyectos
+                ''']
             ]
         ]
     ])
@@ -53,7 +65,7 @@ pipeline {
                         }
                     }
 
-                    // 2. TAREAS ADICIONALES: Solo si el usuario marcó algún checkbox
+                    // 2. TAREAS ADICIONALES: Solo si el usuario marcó algún checkbox válido
                     def seleccionBruta = params.MODULOS_ADICIONALES ?: ""
 
                     if (seleccionBruta != "" && seleccionBruta != "Error al cargar módulos") {
@@ -66,8 +78,15 @@ pipeline {
                                 tareasParalelas["Módulo Extra: ${nombreModulo}"] = {
                                     stage("Extra: ${nombreModulo}") {
                                         catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                                            echo "Iniciando pruebas adicionales para: ${nombreModulo}..."
+                                            echo "Iniciando pruebas adicionales para el proyecto de Jenkins: ${nombreModulo}..."
+
+                                            // Aquí usamos el nombre del proyecto detectado en Jenkins para filtrarlo en Gradle
                                             sh "gradle test --tests '*${nombreModulo}*' --rerun-tasks --info --no-configuration-cache"
+
+                                            /* Nota de Arquitecto: Si los checkboxes detectados son realmente OTROS pipelines de Jenkins,
+                                               en lugar del 'sh' de arriba, deberías usar el disparador de jobs nativo:
+                                               build job: "${nombreModulo}", wait: true
+                                            */
                                         }
                                     }
                                 }
@@ -76,7 +95,7 @@ pipeline {
                     }
 
                     // 3. Ejecutamos el bloque principal y los extras (si los hay) simultáneamente
-                    echo "Ejecutando en paralelo: Proyecto Principal + [${seleccionBruta}]"
+                    echo "Ejecutando en paralelo: Proyecto Principal + Extras Seleccionados"
                     parallel tareasParalelas
                 }
             }

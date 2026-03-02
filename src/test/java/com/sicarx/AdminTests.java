@@ -56,8 +56,8 @@ public class AdminTests {
         }
 
         @Test
-        @DisplayName("Test 3: Retirar dinero reduce balance (FALLA ESPERADA)")
-        @Description("Este test está diseñado para fallar y visualizar en Allure Reports")
+        @DisplayName("Test 3: Retirar dinero reduce balance")
+        @Description("Verificar que al retirar dinero el balance disminuye correctamente")
         @Severity(SeverityLevel.CRITICAL)
         void testWithdrawMoney_Fail() {
             // Arrange
@@ -67,8 +67,8 @@ public class AdminTests {
             // Act
             balance -= withdrawAmount;
 
-            // Assert - ESTA LÍNEA HACE QUE FALLE
-            assertEquals(expectedBalance + 100, balance, "Este test falla intencionalmente para demostrar fallos en Allure");
+            // Assert
+            assertEquals(expectedBalance, balance, "El balance después del retiro debe ser correcto");
         }
 
         @Test
@@ -107,12 +107,12 @@ public class AdminTests {
         }
 
         @Test
-        @DisplayName("Test 6: Username contiene 'admin' (FALLA ESPERADA)")
-        @Description("Este test falla intencionalmente para demostrar fallos")
+        @DisplayName("Test 6: Username contiene 'admin'")
+        @Description("Verificar que el username contiene la palabra 'admin'")
         @Severity(SeverityLevel.NORMAL)
         void testAdminUsername_Fail() {
-            // Este test fallará porque username es "admin_user" pero la aserción es incorrecta
-            assertTrue(username.equals("root"), "Username debe ser 'root'");
+            // Este test verifica que username contiene "admin"
+            assertTrue(username.contains("admin"), "El username debe contener 'admin'");
         }
 
         @Test
@@ -138,17 +138,17 @@ public class AdminTests {
     class SpecialOperationsTests {
 
         @Test
-        @DisplayName("Test 9: Cálculo de interés (FALLA ESPERADA)")
-        @Description("Cálculo de interés que falla intencionalmente")
+        @DisplayName("Test 9: Cálculo de interés")
+        @Description("Verificar que el cálculo de interés es correcto")
         @Severity(SeverityLevel.NORMAL)
         void testInterestCalculation_Fail() {
             // Arrange
             double rate = 0.05; // 5% de interés
             double expectedInterest = balance * rate;
-            double actualInterest = 100; // Valor incorrecto
+            double actualInterest = expectedInterest; // Valor correcto
 
-            // Assert - FALLA ESPERADA
-            assertEquals(expectedInterest, actualInterest, "El cálculo de interés es incorrecto");
+            // Assert
+            assertEquals(expectedInterest, actualInterest, "El cálculo de interés es correcto");
         }
 
         @Test
@@ -189,16 +189,16 @@ public class AdminTests {
         }
 
         @Test
-        @DisplayName("Test 12: Validar límite de transacción (FALLA ESPERADA)")
-        @Description("Test que falla para demostrar validación de límites")
+        @DisplayName("Test 12: Validar límite de transacción")
+        @Description("Verificar que la transacción no excede el límite permitido")
         @Severity(SeverityLevel.NORMAL)
         void testTransactionLimit_Fail() {
             // Arrange
             int maxTransactionLimit = 500;
-            int transactionAmount = 600;
+            int transactionAmount = 400; // Dentro del límite
 
-            // Act & Assert - FALLA ESPERADA
-            assertTrue(transactionAmount <= maxTransactionLimit, "La transacción excede el límite permitido");
+            // Act & Assert
+            assertTrue(transactionAmount <= maxTransactionLimit, "La transacción no debe exceder el límite permitido");
         }
     }
 
@@ -229,15 +229,15 @@ public class AdminTests {
         }
 
         @Test
-        @DisplayName("Test 14: Email debe ser válido (FALLA ESPERADA)")
-        @Description("Validación de email con formato inválido para demostrar fallos")
+        @DisplayName("Test 14: Email debe ser válido")
+        @Description("Validar que el email está en un formato válido")
         @Severity(SeverityLevel.NORMAL)
         void testEmailValidation_Fail() {
             // Arrange
             String email = "admin@company.com";
 
-            // Assert - FALLA ESPERADA (validación incorrecta)
-            assertTrue(email.matches("^[A-Z]+@[A-Z]+\\.[A-Z]+$"), "Email debe estar en formato válido (incorrecto propósito)");
+            // Assert - Validación correcta
+            assertTrue(email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"), "Email debe estar en formato válido");
         }
 
         @Test
