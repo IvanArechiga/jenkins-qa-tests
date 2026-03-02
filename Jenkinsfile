@@ -1,8 +1,23 @@
-pipeline {
-    agent any // Se ejecuta en el contenedor principal de Jenkins
+// MAGIA AÑADIDA: Interfaz de Checkboxes Segura (Active Choices Plugin)
+properties([
+    parameters([
+        [$class: 'ChoiceParameter',
+            choiceType: 'PT_CHECKBOX',
+            description: 'Selecciona los módulos a ejecutar en paralelo (El Core siempre se ejecuta):',
+            name: 'REPOSITORIOS_A_EJECUTAR',
+            script: [
+                $class: 'GroovyScript',
+                fallbackScript: [sandbox: true, script: 'return ["Error al cargar repositorios"]'],
+                // Aquí pones tu lista. Nota: añadir ':selected' al final marca la casilla por defecto.
+                script: [sandbox: true, script: 'return ["core:selected", "ventas", "cajas", "inventario", "pagos"]']
+            ]
+        ]
+    ])
+])
 
-    // INYECCIÓN DE HERRAMIENTAS: Aquí Jenkins carga Java y Gradle
-    // Los nombres deben coincidir EXACTAMENTE con los que pusiste en el Paso 2.1
+pipeline {
+    agent any
+
     tools {
         jdk 'JDK21'
         gradle 'Gradle'
@@ -11,47 +26,60 @@ pipeline {
     stages {
         stage('Descargar Código') {
             steps {
-                // Descarga el código de la rama actual de GitHub
                 checkout scm
-                echo 'Código descargado de GitHub correctamente.'
+                echo 'Código base descargado correctamente.'
             }
         }
 
         stage('Compilar Proyecto') {
             steps {
-                echo 'Descargando dependencias de Gradle y compilando clases de prueba...'
-                // Prepara el proyecto descargando dependencias
                 sh 'gradle clean testClasses'
             }
         }
 
-        stage('Ejecutar Pruebas') {
+        // Ejecución 100% Dinámica basada en los Checkboxes seleccionados
+        stage('Ejecución de Pruebas en Paralelo') {
             steps {
-                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                    // Añadimos --no-configuration-cache para evitar errores de compatibilidad en Gradle 8+
-                    sh 'gradle test --rerun-tasks --info --no-configuration-cache'
+                script {
+                    // Limpiamos los resultados recibidos (Jenkins envía las respuestas separadas por coma)
+                    def seleccionBruta = params.REPOSITORIOS_A_EJECUTAR ?: "core"
+                    def seleccionados = seleccionBruta.split(',')
+                    def tareasParalelas = [:]
+
+                    for (int i = 0; i < seleccionados.size(); i++) {
+                        // Limpiamos la palabra en caso de que venga con el texto extra ':selected'
+                        def nombreRepo = seleccionados[i].replace(':selected', '').trim()
+
+                        if (nombreRepo != "") {
+                            tareasParalelas["Pruebas ${nombreRepo}"] = {
+                                stage("Repo: ${nombreRepo}") {
+                                    catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                                        echo "Iniciando pruebas para el repositorio: ${nombreRepo}..."
+
+                                        // Comando de ejecución dinámico de Gradle
+                                        sh "gradle test --tests '*${nombreRepo}*' --rerun-tasks --info --no-configuration-cache"
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (tareasParalelas.size() > 0) {
+                        echo "Ejecutando simultáneamente: ${seleccionBruta}"
+                        parallel tareasParalelas
+                    } else {
+                        echo "No se seleccionó ningún repositorio."
+                    }
                 }
             }
         }
     }
 
-    // Esta sección siempre se ejecuta al final, fallen o pasen las pruebas
     post {
         always {
-            echo 'Finalizó la ejecución.'
-
-            // Más adelante, para generar el reporte de Allure en Gradle,
-            // descomentarás esta línea (Nota: en Gradle la carpeta por defecto es build/allure-results):
+            echo 'Generando Reporte Allure Consolidado...'
             allure includeProperties: false, jdk: '', results: [[path: 'build/allure-results']]
-
-            echo 'Limpiando espacio de trabajo para no saturar el disco del servidor...'
             cleanWs()
-        }
-        success {
-            echo '✅ Todas las pruebas pasaron exitosamente. El código es estable.'
-        }
-        failure {
-            echo '❌ Algunas pruebas fallaron o hubo un error de compilación. Revisa los logs.'
         }
     }
 }
