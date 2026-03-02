@@ -1,7 +1,7 @@
 // MAGIA AÑADIDA: Lectura dinámica de la API interna de Jenkins (Sin Sandbox)
 properties([
     parameters([
-        [$class: 'ChoiceParameter',
+        [$class: 'CascadeChoiceParameter', // <-- CORRECCIÓN CLAVE: Usar la clase del Active Choices Plugin
             choiceType: 'PT_CHECKBOX',
             description: 'Selecciona módulos ADICIONALES a ejecutar en paralelo (El proyecto principal siempre se ejecutará automáticamente):',
             name: 'MODULOS_ADICIONALES',
@@ -20,6 +20,12 @@ properties([
                             listaProyectos.add(job.fullName)
                         }
                     }
+
+                    // Validación visual: si por alguna razón no detecta nada, avisa en lugar de quedar en blanco
+                    if (listaProyectos.isEmpty()) {
+                        return ["No se encontraron otros proyectos en Jenkins"]
+                    }
+
                     return listaProyectos
                 ''']
             ]
@@ -68,7 +74,7 @@ pipeline {
                     // 2. TAREAS ADICIONALES: Solo si el usuario marcó algún checkbox válido
                     def seleccionBruta = params.MODULOS_ADICIONALES ?: ""
 
-                    if (seleccionBruta != "" && seleccionBruta != "Error al cargar módulos") {
+                    if (seleccionBruta != "" && seleccionBruta != "Error al cargar módulos" && seleccionBruta != "No se encontraron otros proyectos en Jenkins") {
                         def seleccionados = seleccionBruta.split(',')
 
                         for (int i = 0; i < seleccionados.size(); i++) {
