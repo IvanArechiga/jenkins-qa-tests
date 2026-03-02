@@ -2,6 +2,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     id("java")
+    id ("io.qameta.allure") version "2.11.2"
     kotlin("jvm") version "1.9.23"
     kotlin("plugin.spring") version "1.9.23"
 }
@@ -29,6 +30,7 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.junit.vintage:junit-vintage-engine:5.10.2")
 
+    testImplementation("io.qameta.allure:allure-junit5:2.33.0")
 
 }
 
