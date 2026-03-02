@@ -1,4 +1,3 @@
-// PROPIEDADES: Configuración de la interfaz de usuario con Active Choices
 properties([
     parameters([
         [$class: 'ChoiceParameter',
@@ -9,8 +8,12 @@ properties([
                 $class: 'GroovyScript',
                 fallbackScript: [sandbox: false, script: 'return ["Error: Ejecuta el build una vez y aprueba el script"]'],
                 script: [sandbox: false, script: '''
+                    // Obtenemos el nombre del proyecto actual dinámicamente
+                    def currentJob = jenkins.model.Jenkins.get().getItem(JOB_NAME)?.fullName
+
                     return jenkins.model.Jenkins.get().getAllItems(hudson.model.Job.class).findAll {
-                        it.fullName != "QA-Automatizacion-Core"
+                        // Filtro dinámico: No mostrar el proyecto donde estamos parados
+                        it.fullName != currentJob
                     }.collect { it.fullName }
                 ''']
             ]
@@ -38,23 +41,18 @@ pipeline {
                 script {
                     def tareasParalelas = [:]
 
-                    // 1. PROYECTO ACTUAL (Core)
-                    tareasParalelas["Proyecto Principal"] = {
-                        stage("Principal") {
-                            catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                                // Usamos --no-daemon para garantizar el cierre del proceso
-                                sh "gradle test --no-daemon --rerun-tasks --info --no-configuration-cache"
-                            }
+                    tareasParalelas["Pruebas Locales"] = {
+                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                            sh "gradle test --no-daemon --rerun-tasks --info --no-configuration-cache"
                         }
                     }
 
-                    // 2. PROYECTOS ADICIONALES
                     if (params.MODULOS_ADICIONALES) {
                         def seleccionados = params.MODULOS_ADICIONALES.split(',')
                         seleccionados.each { nombre ->
                             if (nombre && !nombre.contains("Error")) {
-                                tareasParalelas["Extra: ${nombre}"] = {
-                                    // El 'build job' disparará el otro proyecto en su propio hilo
+                                tareasParalelas["Job: ${nombre}"] = {
+                                    // 'wait: true' es necesario para consolidar el reporte Allure al final
                                     build job: "${nombre.trim()}", wait: true
                                 }
                             }
@@ -69,6 +67,7 @@ pipeline {
 
     post {
         always {
+            echo 'Consolidando resultados Allure...'
             allure includeProperties: false, jdk: '', results: [[path: 'build/allure-results']]
             cleanWs()
         }
