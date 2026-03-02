@@ -4,7 +4,7 @@ pipeline {
     // INYECCIÓN DE HERRAMIENTAS: Aquí Jenkins carga Java y Gradle
     // Los nombres deben coincidir EXACTAMENTE con los que pusiste en el Paso 2.1
     tools {
-        jdk 'JDK17'
+        jdk 'JDK21'
         gradle 'Gradle8.11'
     }
 
