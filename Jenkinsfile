@@ -9,11 +9,13 @@ properties([
                 fallbackScript: [sandbox: false, script: 'return ["Esperando aprobación de script en Jenkins..."]'],
                 script: [sandbox: false, script: '''
                     try {
-                        // Acceso seguro al motor de Jenkins
+                        // Acceso al motor de Jenkins
                         def jenkinsInstance = jenkins.model.Jenkins.get()
-                        def currentJobName = env.JOB_NAME ?: ""
 
-                        // Obtenemos todos los Jobs excluyendo el actual
+                        // FIX: Obtenemos el JOB_NAME desde el binding del script, no desde env
+                        def currentJobName = binding.variables.get('JOB_NAME') ?: ""
+
+                        // Obtenemos todos los Jobs excluyendo el actual para evitar recursividad
                         return jenkinsInstance.getAllItems(hudson.model.Job.class).findAll { job ->
                             job.fullName != currentJobName
                         }.collect { it.fullName }.sort()
@@ -57,7 +59,6 @@ pipeline {
                     if (params.MODULOS_ADICIONALES) {
                         def seleccionados = params.MODULOS_ADICIONALES.split(',')
                         seleccionados.each { nombre ->
-                            // Limpiamos el nombre y validamos que no sea el mensaje de error
                             def jobName = nombre.trim()
                             if (jobName && !jobName.contains("Esperando") && !jobName.contains("Error")) {
                                 tareasParalelas["Job: ${jobName}"] = {
