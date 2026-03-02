@@ -11,14 +11,12 @@ properties([
                     try {
                         def jenkinsInstance = jenkins.model.Jenkins.get()
 
-                        // Obtenemos el nombre del trabajo actual y lo convertimos a String limpio
+                        // Obtenemos el nombre del trabajo actual de forma limpia
                         def currentJobName = (binding.hasVariable('JOB_NAME') ? binding.getVariable('JOB_NAME').toString().trim() : "")
 
-                        // Filtramos comparando contra el fullName forzado a String para exclusión exacta
+                        // Filtramos comparando contra el fullName para exclusión exacta
                         return jenkinsInstance.getAllItems(hudson.model.Job.class).findAll { job ->
-                            def jobFullName = job.fullName.toString().trim()
-                            // Excluimos si el nombre es igual al actual
-                            jobFullName != currentJobName
+                            job.fullName.toString().trim() != currentJobName
                         }.collect { it.fullName }.sort()
                     } catch (Exception e) {
                         return ["Error: " + e.getMessage()]
@@ -38,36 +36,35 @@ pipeline {
     }
 
     stages {
-        stage('Limpieza y Descarga') {
+        stage('Limpieza Profunda') {
             steps {
-                // Forzamos limpieza del espacio de trabajo antes de empezar
+                // Borramos todo rastro físico de la ejecución anterior
                 deleteDir()
+                sh "rm -rf build/ .gradle/ allure-results/"
                 checkout scm
             }
         }
 
-        stage('Ejecución Paralela') {
+        stage('Ejecución de Pruebas') {
             steps {
                 script {
                     def tareasParalelas = [:]
 
-                    // 1. TAREA LOCAL (Core) - Ahora con 'clean' para reparar reportes
-                    tareasParalelas["Pruebas Locales"] = {
-                        stage("Ejecución Core") {
-                            catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                                // Añadimos 'clean' antes de 'test' para borrar resultados viejos
-                                sh "gradle clean test --no-daemon --rerun-tasks --info --no-configuration-cache"
-                            }
+                    // 1. EJECUCIÓN LOCAL (Este proyecto)
+                    tareasParalelas["Pruebas Core"] = {
+                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                            // Clean forzado para regenerar binarios y reportes
+                            sh "gradle clean test --no-daemon --rerun-tasks --info --no-configuration-cache"
                         }
                     }
 
-                    // 2. TAREAS EXTERNAS
+                    // 2. EJECUCIÓN EXTERNA (Otros proyectos)
                     if (params.MODULOS_ADICIONALES) {
                         def seleccionados = params.MODULOS_ADICIONALES.split(',')
                         seleccionados.each { nombre ->
                             def jobName = nombre.trim()
                             if (jobName && !jobName.contains("Esperando") && !jobName.contains("Error")) {
-                                tareasParalelas["Job: ${jobName}"] = {
+                                tareasParalelas["Extra: ${jobName}"] = {
                                     build job: jobName, wait: true
                                 }
                             }
@@ -82,9 +79,12 @@ pipeline {
 
     post {
         always {
-            // Generación de reporte consolidado
-            allure includeProperties: false, jdk: '', results: [[path: 'build/allure-results']]
-            // Limpieza final para no dejar basura en el servidor
+            script {
+                echo 'Generando reporte final Allure...'
+                // Buscamos resultados en la carpeta estándar de Gradle
+                allure includeProperties: false, jdk: '', results: [[path: 'build/allure-results']]
+            }
+            // Limpiamos para evitar problemas en el siguiente build
             cleanWs()
         }
     }
