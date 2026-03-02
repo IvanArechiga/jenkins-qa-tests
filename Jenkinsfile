@@ -3,13 +3,13 @@ properties([
     parameters([
         [$class: 'ChoiceParameter',
             choiceType: 'PT_CHECKBOX',
-            description: 'Selecciona los módulos a ejecutar en paralelo (El Core siempre se ejecuta):',
-            name: 'REPOSITORIOS_A_EJECUTAR',
+            description: 'Selecciona módulos ADICIONALES a ejecutar en paralelo (El proyecto principal siempre se ejecutará automáticamente):',
+            name: 'MODULOS_ADICIONALES',
             script: [
                 $class: 'GroovyScript',
-                fallbackScript: [sandbox: true, script: 'return ["Error al cargar repositorios"]'],
-                // Aquí pones tu lista. Nota: añadir ':selected' al final marca la casilla por defecto.
-                script: [sandbox: true, script: 'return ["core:selected", "ventas", "cajas", "inventario", "pagos"]']
+                fallbackScript: [sandbox: true, script: 'return ["Error al cargar módulos"]'],
+                // Esta es la lista de módulos extra. Ninguno está marcado por defecto.
+                script: [sandbox: true, script: 'return ["ventas", "cajas", "inventario", "pagos"]']
             ]
         ]
     ])
@@ -37,39 +37,47 @@ pipeline {
             }
         }
 
-        // Ejecución 100% Dinámica basada en los Checkboxes seleccionados
+        // Ejecución 100% Dinámica: Fija el proyecto base y añade los extras seleccionados
         stage('Ejecución de Pruebas en Paralelo') {
             steps {
                 script {
-                    // Limpiamos los resultados recibidos (Jenkins envía las respuestas separadas por coma)
-                    def seleccionBruta = params.REPOSITORIOS_A_EJECUTAR ?: "core"
-                    def seleccionados = seleccionBruta.split(',')
                     def tareasParalelas = [:]
 
-                    for (int i = 0; i < seleccionados.size(); i++) {
-                        // Limpiamos la palabra en caso de que venga con el texto extra ':selected'
-                        def nombreRepo = seleccionados[i].replace(':selected', '').trim()
+                    // 1. TAREA OBLIGATORIA: El proyecto principal siempre se ejecuta
+                    tareasParalelas["Proyecto Principal"] = {
+                        stage("Proyecto Principal") {
+                            catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                                echo "Iniciando pruebas base obligatorias..."
+                                sh "gradle test --rerun-tasks --info --no-configuration-cache"
+                            }
+                        }
+                    }
 
-                        if (nombreRepo != "") {
-                            tareasParalelas["Pruebas ${nombreRepo}"] = {
-                                stage("Repo: ${nombreRepo}") {
-                                    catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                                        echo "Iniciando pruebas para el repositorio: ${nombreRepo}..."
+                    // 2. TAREAS ADICIONALES: Solo si el usuario marcó algún checkbox
+                    def seleccionBruta = params.MODULOS_ADICIONALES ?: ""
 
-                                        // Comando de ejecución dinámico de Gradle
-                                        sh "gradle test --tests '*${nombreRepo}*' --rerun-tasks --info --no-configuration-cache"
+                    if (seleccionBruta != "" && seleccionBruta != "Error al cargar módulos") {
+                        def seleccionados = seleccionBruta.split(',')
+
+                        for (int i = 0; i < seleccionados.size(); i++) {
+                            def nombreModulo = seleccionados[i].trim()
+
+                            if (nombreModulo != "") {
+                                tareasParalelas["Módulo Extra: ${nombreModulo}"] = {
+                                    stage("Extra: ${nombreModulo}") {
+                                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                                            echo "Iniciando pruebas adicionales para: ${nombreModulo}..."
+                                            sh "gradle test --tests '*${nombreModulo}*' --rerun-tasks --info --no-configuration-cache"
+                                        }
                                     }
                                 }
                             }
                         }
                     }
 
-                    if (tareasParalelas.size() > 0) {
-                        echo "Ejecutando simultáneamente: ${seleccionBruta}"
-                        parallel tareasParalelas
-                    } else {
-                        echo "No se seleccionó ningún repositorio."
-                    }
+                    // 3. Ejecutamos el bloque principal y los extras (si los hay) simultáneamente
+                    echo "Ejecutando en paralelo: Proyecto Principal + [${seleccionBruta}]"
+                    parallel tareasParalelas
                 }
             }
         }
