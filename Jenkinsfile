@@ -80,15 +80,6 @@ pipeline {
             script {
                 echo 'Generando reporte final Allure...'
                 allure includeProperties: false, jdk: '', results: [[path: 'build/allure-results']]
-            }
-            cleanWs()
-        }
-    }
-    post {
-        always {
-            script {
-                echo 'Generando reporte final Allure...'
-                allure includeProperties: false, jdk: '', results: [[path: 'build/allure-results']]
 
 
                 echo "1. Comprimiendo resultados crudos de Allure..."
