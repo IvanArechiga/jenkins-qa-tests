@@ -84,4 +84,41 @@ pipeline {
             cleanWs()
         }
     }
+    post {
+        always {
+            script {
+                echo 'Generando reporte final Allure...'
+                allure includeProperties: false, jdk: '', results: [[path: 'build/allure-results']]
+
+
+                echo "1. Comprimiendo resultados crudos de Allure..."
+                sh 'cd allure-results && zip -r ../results.zip *'
+
+                def projectName = binding.variables['JOB_NAME']?.toString()?.split('/')?.last() ?: "Default-Project"
+
+                echo "2. Enviando métricas al Servidor Centralizado de Allure para el proyecto: ${projectName}"
+
+                // 🚨 IMPORTANTE: Reemplaza "TU_IP_AQUI" con la IP real de la máquina donde corre el docker de Allure
+                // Ej: def allureApiUrl = "[http://192.168.1.100:5050/allure-docker-service/send-results?project_id=$](http://192.168.1.100:5050/allure-docker-service/send-results?project_id=$){projectName}"
+                def IP_SERVIDOR_ALLURE = "192.169.0.121" // <-- ACTUALIZA ESTO
+                def allureApiUrl = "http://${IP_SERVIDOR_ALLURE}:5050/allure-docker-service/send-results?project_id=${projectName}"
+
+                catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                    // Enviamos el ZIP a la API de nuestro Allure Docker Service
+                    sh """
+                        curl -X POST '${allureApiUrl}' \
+                             -H 'Content-Type: multipart/form-data' \
+                             -F 'allureResults=@results.zip'
+                    """
+
+                    // Le decimos al servidor que genere y actualice el reporte HTML con el nuevo historial
+                    sh "curl -X GET 'http://${IP_SERVIDOR_ALLURE}:5050/allure-docker-service/generate-report?project_id=${projectName}'"
+                }
+
+                echo "✅ Resultados enviados al Hub de Métricas."
+            }
+            // Limpieza del servidor Jenkins para ahorrar espacio
+            cleanWs()
+        }
+    }
 }

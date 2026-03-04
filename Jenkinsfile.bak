@@ -1,57 +1,87 @@
-pipeline {
-    agent any // Se ejecuta en el contenedor principal de Jenkins
+properties([
+    parameters([
+        [$class: 'ChoiceParameter',
+            choiceType: 'PT_CHECKBOX',
+            description: 'Selecciona módulos ADICIONALES a ejecutar en paralelo:',
+            name: 'MODULOS_ADICIONALES',
+            script: [
+                $class: 'GroovyScript',
+                fallbackScript: [sandbox: false, script: 'return ["Esperando aprobación de seguridad..."]'],
+                script: [sandbox: false, script: '''
+                    try {
+                        def jenkinsInstance = jenkins.model.Jenkins.get()
 
-    // INYECCIÓN DE HERRAMIENTAS: Aquí Jenkins carga Java y Gradle
-    // Los nombres deben coincidir EXACTAMENTE con los que pusiste en el Paso 2.1
+                        def currentJobName = binding.hasVariable('jenkinsProject') ? jenkinsProject.fullName : ""
+
+                        return jenkinsInstance.getAllItems(hudson.model.Job.class).findAll { job ->
+                            job.fullName.toString().trim() != currentJobName
+                        }.collect { it.fullName }.sort()
+                    } catch (Exception e) {
+                        return ["Error: " + e.getMessage()]
+                    }
+                ''']
+            ]
+        ]
+    ])
+])
+
+pipeline {
+    agent any
+
     tools {
         jdk 'JDK21'
         gradle 'Gradle'
     }
 
     stages {
-        stage('Descargar Código') {
+        stage('Limpieza Profunda') {
             steps {
-                // Descarga el código de la rama actual de GitHub
+                deleteDir()
+                sh "rm -rf build/ .gradle/ allure-results/"
                 checkout scm
-                echo 'Código descargado de GitHub correctamente.'
             }
         }
 
-        stage('Compilar Proyecto') {
+        stage('Ejecución de Pruebas') {
             steps {
-                echo 'Descargando dependencias de Gradle y compilando clases de prueba...'
-                // Prepara el proyecto descargando dependencias
-                sh 'gradle clean testClasses'
-            }
-        }
+                script {
+                    def tareasParalelas = [:]
 
-        stage('Ejecutar Pruebas') {
-            steps {
-                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                    // Añadimos --no-configuration-cache para evitar errores de compatibilidad en Gradle 8+
-                    sh 'gradle test --rerun-tasks --info --no-configuration-cache'
+                    tareasParalelas["Pruebas Core"] = {
+                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                            sh "gradle clean test --no-daemon --rerun-tasks --info --no-configuration-cache"
+                        }
+                    }
+
+                    if (params.MODULOS_ADICIONALES) {
+                        def seleccionados = params.MODULOS_ADICIONALES.split(',')
+                        seleccionados.each { nombre ->
+                            def jobName = nombre.trim()
+
+                            if (jobName && jobName != env.JOB_NAME && !jobName.contains("Esperando") && !jobName.contains("Error")) {
+                                tareasParalelas["Extra: ${jobName}"] = {
+
+                                    build job: jobName, wait: true, parameters: [
+                                        string(name: 'MODULOS_ADICIONALES', value: '')
+                                    ]
+                                }
+                            }
+                        }
+                    }
+
+                    parallel tareasParalelas
                 }
             }
         }
     }
 
-    // Esta sección siempre se ejecuta al final, fallen o pasen las pruebas
     post {
         always {
-            echo 'Finalizó la ejecución.'
-
-            // Más adelante, para generar el reporte de Allure en Gradle,
-            // descomentarás esta línea (Nota: en Gradle la carpeta por defecto es build/allure-results):
-            allure includeProperties: false, jdk: '', results: [[path: 'build/allure-results']]
-
-            echo 'Limpiando espacio de trabajo para no saturar el disco del servidor...'
+            script {
+                echo 'Generando reporte final Allure...'
+                allure includeProperties: false, jdk: '', results: [[path: 'build/allure-results']]
+            }
             cleanWs()
-        }
-        success {
-            echo '✅ Todas las pruebas pasaron exitosamente. El código es estable.'
-        }
-        failure {
-            echo '❌ Algunas pruebas fallaron o hubo un error de compilación. Revisa los logs.'
         }
     }
 }
