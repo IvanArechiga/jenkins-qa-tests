@@ -80,6 +80,9 @@ pipeline {
             script {
                 echo "1. Verificando y comprimiendo resultados crudos de Allure..."
 
+                // Instalamos zip de forma silenciosa si el contenedor no lo tiene preinstalado
+                sh 'command -v zip >/dev/null 2>&1 || { apt-get update && apt-get install -y zip; }'
+
                 // Script robusto: busca la carpeta, y si no existe, crea un ZIP vacío para no romper el pipeline
                 sh '''
                     if [ -d "build/allure-results" ]; then
@@ -89,20 +92,19 @@ pipeline {
                         echo "Resultados encontrados en allure-results"
                         cd allure-results && zip -r ../results.zip * || echo "Carpeta vacía"
                     else
-                        echo "⚠️ No se encontraron resultados de Allure (posible error de compilación)."
+                        echo "No se encontraron resultados de Allure (posible error de compilación)."
                         mkdir -p allure-results
                         echo "No data generated" > allure-results/empty.txt
                         cd allure-results && zip -r ../results.zip *
                     fi
                 '''
 
-                // Extraemos el nombre del proyecto dinámicamente
-                def projectName = binding.variables['JOB_NAME']?.toString()?.split('/')?.last() ?: "Default-Project"
+                // FIX: Usamos env.JOB_NAME (nativo y seguro en Jenkins pipelines) en lugar del binding
+                def projectName = env.JOB_NAME.split('/').last()
 
                 echo "2. Enviando métricas al Servidor Centralizado de Allure para el proyecto: ${projectName}"
 
-                // 🚨 IMPORTANTE: Reemplaza "TU_IP_AQUI" con la IP real de la máquina donde corre el docker de Allure
-                def IP_SERVIDOR_ALLURE = "192.168.1.XX" // <-- ACTUALIZA ESTO
+                def IP_SERVIDOR_ALLURE = "192.168.0.121" // <-- ACTUALIZA ESTO
                 def allureApiUrl = "http://${IP_SERVIDOR_ALLURE}:5050/allure-docker-service/send-results?project_id=${projectName}"
 
                 catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
